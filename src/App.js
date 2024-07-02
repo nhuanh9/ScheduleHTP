@@ -1,42 +1,40 @@
-
-import "./App.css";import React, { useState } from 'react';
+import React, { useState } from 'react';
 
 const App = () => {
   const initialData = [
-    { startTime: '08:00', endTime: '10:00', day: 'Thứ 2' },
-    { startTime: '10:00', endTime: '12:00', day: 'Thứ 3' },
-    { startTime: '13:00', endTime: '15:00', day: 'Thứ 4' },
-    { startTime: '15:00', endTime: '17:00', day: 'Thứ 5' },
-    { startTime: '09:00', endTime: '11:00', day: 'Thứ 6' },
-    { startTime: '14:00', endTime: '16:00', day: 'Thứ 7' },
+    { days: ['Thứ 2'], startTime: '08:00', endTime: '10:00' },
+    { days: ['Thứ 3'], startTime: '10:00', endTime: '12:00' },
+    { days: ['Thứ 4'], startTime: '13:00', endTime: '15:00' },
+    { days: ['Thứ 5'], startTime: '15:00', endTime: '17:00' },
+    { days: ['Thứ 6'], startTime: '09:00', endTime: '11:00' },
+    { days: ['Thứ 7'], startTime: '14:00', endTime: '16:00' },
   ];
 
   const [data, setData] = useState(initialData);
+  const [originalData, setOriginalData] = useState(JSON.parse(JSON.stringify(initialData)));
+  const [editedRows, setEditedRows] = useState([]);
   const [newSchedule, setNewSchedule] = useState({
-    day: 'Thứ 2',
+    days: [],
     startTime: '',
     endTime: '',
   });
 
-  const getOccupiedTimes = (excludeIndex = -1) => {
-    const days = [
-      { day: 'Thứ 2', occupiedTimes: [] },
-      { day: 'Thứ 3', occupiedTimes: [] },
-      { day: 'Thứ 4', occupiedTimes: [] },
-      { day: 'Thứ 5', occupiedTimes: [] },
-      { day: 'Thứ 6', occupiedTimes: [] },
-      { day: 'Thứ 7', occupiedTimes: [] },
-    ];
+  const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
-    data.forEach((entry, index) => {
+  const getOccupiedTimes = (excludeIndex = -1) => {
+    const days = daysOfWeek.map(day => ({ day, occupiedTimes: [] }));
+
+    originalData.forEach((entry, index) => {
       if (index !== excludeIndex) {
-        const dayIndex = days.findIndex(d => d.day === entry.day);
-        if (dayIndex !== -1) {
-          days[dayIndex].occupiedTimes.push({
-            startTime: entry.startTime,
-            endTime: entry.endTime,
-          });
-        }
+        entry.days.forEach(day => {
+          const dayIndex = days.findIndex(d => d.day === day);
+          if (dayIndex !== -1) {
+            days[dayIndex].occupiedTimes.push({
+              startTime: entry.startTime,
+              endTime: entry.endTime,
+            });
+          }
+        });
       }
     });
 
@@ -57,50 +55,111 @@ const App = () => {
 
   const handleChange = (index, field, value) => {
     const newData = [...data];
-    newData[index][field] = value;
+    if (field === 'days') {
+      const options = value.target.options;
+      const selectedDays = [];
+      for (let i = 0; i < options.length; i++) {
+        if (options[i].selected) {
+          selectedDays.push(options[i].value);
+        }
+      }
+      newData[index][field] = selectedDays;
+    } else {
+      newData[index][field] = value;
+    }
+    console.log(data)
+    console.log(originalData)
     setData(newData);
+    if (!editedRows.includes(index)) {
+      setEditedRows([...editedRows, index]);
+    }
   };
 
   const handleSave = (index) => {
-    const { day, startTime, endTime } = data[index];
-    if (isTimeOccupied(day, startTime, endTime, index)) {
-      alert(`Time slot on ${day} from ${startTime} to ${endTime} is already occupied.`);
-    } else {
-      // Logic lưu dữ liệu có thể được thêm vào đây (ví dụ: gửi dữ liệu đến server)
+    const { days, startTime, endTime } = data[index];
+    let conflict = false;
+
+    days.forEach(day => {
+      if (isTimeOccupied(day, startTime, endTime, index)) {
+        alert(`Time slot on ${day} from ${startTime} to ${endTime} is already occupied.`);
+        conflict = true;
+      }
+    });
+
+    if (!conflict) {
       console.log('Saved:', data[index]);
+      const newOriginalData = [...originalData];
+      newOriginalData[index] = { ...data[index] };
+      setOriginalData(newOriginalData);
+      setEditedRows(editedRows.filter(row => row !== index));
     }
   };
 
   const handleAddSchedule = (e) => {
     e.preventDefault();
-    const { day, startTime, endTime } = newSchedule;
-    if (isTimeOccupied(day, startTime, endTime)) {
-      alert(`Time slot on ${day} from ${startTime} to ${endTime} is already occupied.`);
-    } else {
-      setData([...data, newSchedule]);
-      setNewSchedule({ day: 'Thứ 2', startTime: '', endTime: '' });
+    const { days, startTime, endTime } = newSchedule;
+    let conflict = false;
+
+    days.forEach(day => {
+      if (isTimeOccupied(day, startTime, endTime)) {
+        alert(`Time slot on ${day} from ${startTime} to ${endTime} is already occupied.`);
+        conflict = true;
+      }
+    });
+
+    if (!conflict) {
+      const newEntries = days.map(day => ({
+        days,
+        startTime,
+        endTime,
+      }));
+      setData([...data, ...newEntries]);
+      setOriginalData([...originalData, ...newEntries]); // Update original data to include new entry
+      setNewSchedule({ days: [], startTime: '', endTime: '' });
     }
   };
 
   const handleFormChange = (field, value) => {
-    setNewSchedule({ ...newSchedule, [field]: value });
+    if (field === 'days') {
+      const options = value.target.options;
+      const selectedDays = [];
+      for (let i = 0; i < options.length; i++) {
+        if (options[i].selected) {
+          selectedDays.push(options[i].value);
+        }
+      }
+      setNewSchedule({ ...newSchedule, [field]: selectedDays });
+    } else {
+      setNewSchedule({ ...newSchedule, [field]: value });
+    }
+  };
+
+  const handleDaysChange = (e) => {
+    const options = e.target.options;
+    const selectedDays = [];
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].selected) {
+        selectedDays.push(options[i].value);
+      }
+    }
+    setNewSchedule({ ...newSchedule, days: selectedDays });
   };
 
   return (
       <div>
         <form onSubmit={handleAddSchedule}>
           <label>
-            Day:
+            Days:
             <select
-                value={newSchedule.day}
-                onChange={(e) => handleFormChange('day', e.target.value)}
+                multiple
+                value={newSchedule.days}
+                onChange={handleDaysChange}
             >
-              <option value="Thứ 2">Thứ 2</option>
-              <option value="Thứ 3">Thứ 3</option>
-              <option value="Thứ 4">Thứ 4</option>
-              <option value="Thứ 5">Thứ 5</option>
-              <option value="Thứ 6">Thứ 6</option>
-              <option value="Thứ 7">Thứ 7</option>
+              {daysOfWeek.map(day => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+              ))}
             </select>
           </label>
           <label>
@@ -126,7 +185,7 @@ const App = () => {
         <table border="1" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
           <tr>
-            <th>Day</th>
+            <th>Days</th>
             <th>Start Time</th>
             <th>End Time</th>
             <th>Actions</th>
@@ -137,16 +196,23 @@ const App = () => {
               <tr key={index}>
                 <td>
                   <select
-                      value={entry.day}
-                      onChange={(e) => handleChange(index, 'day', e.target.value)}
+                      multiple
+                      value={entry.days}
+                      onChange={(e) => handleChange(index, 'days', e)}
                   >
-                    <option value="Thứ 2">Thứ 2</option>
-                    <option value="Thứ 3">Thứ 3</option>
-                    <option value="Thứ 4">Thứ 4</option>
-                    <option value="Thứ 5">Thứ 5</option>
-                    <option value="Thứ 6">Thứ 6</option>
-                    <option value="Thứ 7">Thứ 7</option>
+                    {daysOfWeek.map(day => (
+                        <option key={day} value={day}>
+                          {day}
+                        </option>
+                    ))}
                   </select>
+                  <div>
+                    {entry.days.map(day => (
+                        <span key={day} style={{ display: 'inline-block', marginRight: '5px' }}>
+                      {day}
+                    </span>
+                    ))}
+                  </div>
                 </td>
                 <td>
                   <input
@@ -163,14 +229,21 @@ const App = () => {
                   />
                 </td>
                 <td>
-                  <button onClick={() => handleSave(index)}>Save</button>
+                  <button
+                      onClick={() => handleSave(index)}
+                      disabled={!editedRows.includes(index)}
+                  >
+                    Save
+                  </button>
                 </td>
               </tr>
           ))}
           </tbody>
         </table>
+        <button onClick={() => console.log(getOccupiedTimes())}>Check Occupied Times</button>
       </div>
   );
 };
 
 export default App;
+// T2 8-10 -> T2 8-9: ok
